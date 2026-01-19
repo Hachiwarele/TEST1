@@ -42,24 +42,38 @@
 
 .star {
   position: absolute;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   background: #fff7ad;
   border-radius: 50%;
-  box-shadow: 0 0 10px #fff7ad, 0 0 20px #ffe8f8;
-  animation: float 6s infinite ease-in-out;
+  box-shadow: 0 0 10px #fff7ad, 0 0 25px #ffe8f8;
+  animation: float 6s infinite ease-in-out, twinkle 2.5s infinite ease-in-out;
   opacity: 0.9;
 }
 
 @keyframes float {
-  0%   { transform: translateY(0px); }
-  50%  { transform: translateY(-40px); }
-  100% { transform: translateY(0px); }
+  0%   { transform: translateY(0px) translateX(0px); }
+  25%  { transform: translateY(-25px) translateX(5px); }
+  50%  { transform: translateY(-40px) translateX(-5px); }
+  75%  { transform: translateY(-20px) translateX(3px); }
+  100% { transform: translateY(0px) translateX(0px); }
 }
+
+@keyframes twinkle {
+  0%   { opacity: 0.3; transform: scale(0.9); }
+  50%  { opacity: 1;   transform: scale(1.2); }
+  100% { opacity: 0.4; transform: scale(1); }
+}
+
 
 .star.s1 { top: 40%; left: 20%; animation-delay: 0s; }
 .star.s2 { top: 60%; left: 70%; animation-delay: 1s; }
 .star.s3 { top: 30%; left: 50%; animation-delay: 2s; }
+.star.s4 { top: 20%; left: 10%; animation-delay: 0.5s; }
+.star.s5 { top: 75%; left: 30%; animation-delay: 1.5s; }
+.star.s6 { top: 15%; left: 80%; animation-delay: 2.5s; }
+.star.s7 { top: 50%; left: 90%; animation-delay: 3s; }
+.star.s8 { top: 85%; left: 60%; animation-delay: 3.5s; }
 
     
   </style>
@@ -72,6 +86,11 @@
 <div class="star s1"></div>
 <div class="star s2"></div>
 <div class="star s3"></div>
+<div class="star s4"></div>
+<div class="star s5"></div>
+<div class="star s6"></div>
+<div class="star s7"></div>
+<div class="star s8"></div>
 
   <h1>ゆめかわワールドへようこそ ✨</h1>
   <p>はちわれぇの初めてのゆめかわWebアプリ</p>
