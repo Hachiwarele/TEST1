@@ -2,110 +2,50 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>海のページ３</title>
+  <title>海のページ2</title>
 
   <style>
-body {
-  margin: 0;
-  padding: 0;
-
-  background-image:
-    linear-gradient(
-      180deg,
-      #7fdcff,
-      #6ecff7,
-      #5ec2ef,
-      #4bb8ff,
-      #3ea4e6,
-      #2f92d6,
-      #1f8ad1,
-      #0f6fb8,
-      #005b99,
-      #00335c
-    ),
-  
-
-  background-blend-mode: overlay;
-
-  /* ★ これが白い部分を消す魔法 ★ */
-  background-size: 100% 100%;
-
-  background-repeat: no-repeat;
-
-  font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
-  text-align: center;
-  color: #d6f7ff;
-  overflow: hidden;
-}
-
+    body {
+      margin: 0;
+      padding: 0;
+      background: #6A8BC3;
+      font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
+      text-align: center;
+      color: #ffffff;
+    }
 
     h1 {
       margin-top: 80px;
       font-size: 46px;
-      text-shadow: 0 0 15px #66d9ff, 0 0 30px #99ecff;
     }
 
     p {
       font-size: 20px;
       margin-top: 20px;
-      color: #bdefff;
     }
 
-    /* 泡アニメーション */
-    .bubble {
-      position: absolute;
-      width: 20px;
-      height: 20px;
-      background: rgba(255, 255, 255, 0.5);
-      border-radius: 50%;
-      animation: rise 8s infinite ease-in;
-      filter: blur(2px);
-    }
-
-    @keyframes rise {
-      0%   { transform: translateY(0) scale(1); opacity: 0.8; }
-      50%  { opacity: 1; }
-      100% { transform: translateY(-800px) scale(1.3); opacity: 0; }
-    }
-
-    .b1 { left: 15%; animation-delay: 0s; }
-    .b2 { left: 35%; animation-delay: 2s; }
-    .b3 { left: 55%; animation-delay: 4s; }
-    .b4 { left: 75%; animation-delay: 1s; }
-    .b5 { left: 50%; animation-delay: 3s; }
-
-    /* 戻るボタン */
     .back-button {
       display: inline-block;
       margin-top: 60px;
       padding: 15px 30px;
-      background: #3399ff;
+      background: #4f6fa3;
       color: white;
       border-radius: 30px;
       text-decoration: none;
       font-size: 20px;
-      box-shadow: 0 0 10px #66c2ff, 0 0 20px #99ddff;
       transition: 0.3s;
     }
 
     .back-button:hover {
-      background: #1a8cff;
-      box-shadow: 0 0 15px #66c2ff, 0 0 30px #99ddff;
+      background: #3d5a8a;
     }
   </style>
 </head>
 
 <body>
 
-  <!-- 泡 -->
-  <div class="bubble b1"></div>
-  <div class="bubble b2"></div>
-  <div class="bubble b3"></div>
-  <div class="bubble b4"></div>
-  <div class="bubble b5"></div>
-
   <h1>海のページ２ 🐬</h1>
-  <p>ここは深海のような静かな世界</p>
+  <p>ここは静かな世界</p>
 
   <a href="index.html" class="back-button">もどる ←</a>
 
