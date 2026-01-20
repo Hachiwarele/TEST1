@@ -8,19 +8,27 @@
     body {
       margin: 0;
       padding: 0;
-background: linear-gradient(
-  180deg,
-  #7fdcff,
-  #4bb8ff,
-  #1f8ad1,
-  #005b99,
-  #00335c,
-  #005b99,
-  #1f8ad1,
-  #4bb8ff,
-  #7fdcff
-);
 
+      /* ★ ノイズ重ねグラデーション（ストライプ完全消滅）★ */
+      background-image:
+        linear-gradient(
+          180deg,
+          #7fdcff,
+          #6ecff7,
+          #5ec2ef,
+          #4bb8ff,
+          #3ea4e6,
+          #2f92d6,
+          #1f8ad1,
+          #0f6fb8,
+          #005b99,
+          #00335c
+        ),
+        url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4//8/AwAI/AL+zWx/AAAAAElFTkSuQmCC");
+
+      background-blend-mode: overlay;
+      background-size: cover;
+      background-repeat: no-repeat;
 
       font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
       text-align: center;
@@ -40,15 +48,15 @@ background: linear-gradient(
       color: #bdefff;
     }
 
-    /* 泡アニメーション（1ページ目と同じ） */
+    /* 泡アニメーション */
     .bubble {
       position: absolute;
       width: 20px;
       height: 20px;
-      background: rgba(255, 255, 255, 0.7);
+      background: rgba(255, 255, 255, 0.5);
       border-radius: 50%;
       animation: rise 8s infinite ease-in;
-      filter: blur(1px);
+      filter: blur(2px);
     }
 
     @keyframes rise {
