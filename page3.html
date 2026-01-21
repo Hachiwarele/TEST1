@@ -2,82 +2,28 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>ちいかわギャラリー</title>
-
+  <title>ちいかわギャラリー Page3</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-      background: linear-gradient(#cce7ff, #ffffff);
-      min-height: 100vh;
-    }
-
-    #back-btn {
-      display: inline-block;
-      margin-bottom: 20px;
-      padding: 8px 14px;
-      background: #eee;
-      border: 1px solid #aaa;
-      cursor: pointer;
-    }
-
-    #form-area {
-      display: none;
-      margin-bottom: 20px;
-    }
-
-    .card {
-      border: 1px solid #ccc;
-      padding: 10px;
-      margin-bottom: 20px;
-      width: 250px;
-      background: white;
-      border-radius: 8px;
-    }
-
-    .card img {
-      width: 100%;
-      border-radius: 6px;
-    }
-
-    .like-btn {
-      background: #ffdddd;
-      border: 1px solid #ffaaaa;
-      padding: 5px 10px;
-      cursor: pointer;
-      margin-right: 10px;
-    }
-
-    .delete-btn {
-      background: #ddd;
-      border: 1px solid #aaa;
-      padding: 5px 10px;
-      cursor: pointer;
-    }
-
-    #gallery {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 20px;
-    }
+    body { font-family: sans-serif; padding: 20px; background: linear-gradient(#cce7ff, #ffffff); min-height: 100vh; }
+    #back-btn { display: inline-block; margin-bottom: 20px; padding: 8px 14px; background: #eee; border: 1px solid #aaa; cursor: pointer; }
+    #form-area { display: none; margin-bottom: 20px; }
+    .card { border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; width: 250px; background: white; border-radius: 8px; }
+    .card img { width: 100%; border-radius: 6px; }
+    .like-btn { background: #ffdddd; border: 1px solid #ffaaaa; padding: 5px 10px; cursor: pointer; margin-right: 10px; }
+    .delete-btn { background: #ddd; border: 1px solid #aaa; padding: 5px 10px; cursor: pointer; }
+    #gallery { display: flex; flex-wrap: wrap; gap: 20px; }
   </style>
 </head>
-
 <body>
-
   <button id="back-btn" onclick="location.href='index.html'">← ページに戻る</button>
-
-  <h1>ちいかわギャラリー</h1>
-
+  <h1>ちいかわギャラリー Page3</h1>
   <button onclick="toggleForm()">投稿フォームを開く</button>
 
   <div id="form-area">
     <p>画像ファイル：</p>
     <input type="file" id="imageFile" />
-
     <p>説明：</p>
     <input type="text" id="desc" />
-
     <br><br>
     <button onclick="uploadItem()">投稿する</button>
   </div>
@@ -105,23 +51,16 @@
     async function uploadItem() {
       const file = document.getElementById("imageFile").files[0];
       const desc = document.getElementById("desc").value;
-
-      if (!file) {
-        alert("Please select an image");
-        return;
-      }
+      if (!file) { alert("Please select an image"); return; }
 
       const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const fileName = `${Date.now()}-${safeName}`;
+      const fileName = `page3/${Date.now()}-${safeName}`;
 
       const { error: imgErr } = await client.storage
         .from("chiikawa-images")
         .upload(fileName, file);
 
-      if (imgErr) {
-        alert("Upload failed");
-        return;
-      }
+      if (imgErr) { alert("Upload failed"); return; }
 
       const { data: publicUrl } = client.storage
         .from("chiikawa-images")
@@ -129,12 +68,9 @@
 
       const { error: dbErr } = await client
         .from("items")
-        .insert([{ image_url: publicUrl.publicUrl, description: desc }]);
+        .insert([{ image_url: publicUrl.publicUrl, description: desc, gallery: "page3" }]);
 
-      if (dbErr) {
-        alert("Save failed");
-        return;
-      }
+      if (dbErr) { alert("Save failed"); return; }
 
       alert("Posted");
       loadItems();
@@ -147,11 +83,10 @@
       const { data: items, error: itemsErr } = await client
         .from("items")
         .select("*")
+        .eq("gallery", "page3")
         .order("created_at", { ascending: false });
 
-      if (itemsErr || !items) {
-        return;
-      }
+      if (itemsErr || !items) { return; }
 
       for (const item of items) {
         const { data: liked, error: likeErr } = await client
@@ -164,20 +99,14 @@
 
         const div = document.createElement("div");
         div.className = "card";
-
         div.innerHTML = `
           <img src="${item.image_url}" />
           <p>${item.description || ""}</p>
-
           <button class="like-btn" onclick="toggleLike(${item.id})">
             ${isLiked ? "💖" : "🤍"} ${item.likes ?? 0}
           </button>
-
-          <button class="delete-btn" onclick="deleteItem(${item.id})">
-            削除
-          </button>
+          <button class="delete-btn" onclick="deleteItem(${item.id})">削除</button>
         `;
-
         gallery.appendChild(div);
       }
     }
@@ -190,9 +119,7 @@
           .eq("item_id", itemId)
           .eq("user_id", userId);
 
-        if (check.error) {
-          return;
-        }
+        if (check.error) { return; }
 
         const liked = Array.isArray(check.data) && check.data.length > 0;
 
@@ -202,18 +129,12 @@
             .delete()
             .eq("item_id", itemId)
             .eq("user_id", userId);
-
-          if (del.error) {
-            return;
-          }
+          if (del.error) { return; }
         } else {
           const ins = await client
             .from("likes")
             .insert([{ item_id: itemId, user_id: userId }]);
-
-          if (ins.error) {
-            return;
-          }
+          if (ins.error) { return; }
         }
 
         const cnt = await client
@@ -237,12 +158,7 @@
 
     async function deleteItem(id) {
       const pass = prompt("Enter delete password");
-
-      if (pass !== "pass") {
-        alert("Incorrect password");
-        return;
-      }
-
+      if (pass !== "pass") { alert("Incorrect password"); return; }
       await client.from("items").delete().eq("id", id);
       alert("Deleted");
       loadItems();
@@ -250,6 +166,5 @@
 
     loadItems();
   </script>
-
 </body>
 </html>
