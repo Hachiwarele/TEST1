@@ -117,9 +117,11 @@ async function uploadItem() {
     .upload(fileName, file);
 
   if (imgErr) {
+    console.log("UPLOAD ERROR:", imgErr);
     alert("画像アップロードに失敗しました");
     return;
   }
+
 
   // 公開URL取得
   const { data: publicUrl } = client.storage
