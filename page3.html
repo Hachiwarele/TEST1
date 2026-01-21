@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>ちいかわギャラリー</title>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: linear-gradient(#cce7ff, #ffffff);
+      min-height: 100vh;
+    }
+
+    #back-btn {
+      display: inline-block;
+      margin-bottom: 20px;
+      padding: 8px 14px;
+      background: #eee;
+      border: 1px solid #aaa;
+      cursor: pointer;
+    }
+
+    #form-area {
+      display: none;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 20px;
+      width: 250px;
+      background: white;
+      border-radius: 8px;
+    }
+
+    .card img {
+      width: 100%;
+      border-radius: 6px;
+    }
+
+    .like-btn {
+      background: #ffdddd;
+      border: 1px solid #ffaaaa;
+      padding: 5px 10px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+
+    .delete-btn {
+      background: #ddd;
+      border: 1px solid #aaa;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+
+    #gallery {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <button id="back-btn" onclick="location.href='index.html'">← ページに戻る</button>
+
+  <h1>ちいかわギャラリー</h1>
+
+  <button onclick="toggleForm()">投稿フォームを開く</button>
+
+  <div id="form-area">
+    <p>画像ファイル：</p>
+    <input type="file" id="imageFile" />
+
+    <p>説明：</p>
+    <input type="text" id="desc" />
+
+    <br><br>
+    <button onclick="uploadItem()">投稿する</button>
+  </div>
+
+  <div id="gallery"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const client = supabase.createClient(
+      "https://ygwqpkeopbhztcgzkqke.supabase.co",
+      "sb_publishable_yXUDCLKJxQKuMvt1LnDMSg_s8mLrrux"
+    );
+
+    let userId = localStorage.getItem("user_id");
+    if (!userId) {
+      userId = crypto.randomUUID();
+      localStorage.setItem("user_id", userId);
+    }
+
+    function toggleForm() {
+      const area = document.getElementById("form-area");
+      area.style.display = area.style.display === "none" ? "block" : "none";
+    }
+
+    async function uploadItem() {
+      const file = document.getElementById("imageFile").files[0];
+      const desc = document.getElementById("desc").value;
+
+      if (!file) {
+        alert("Please select an image");
+        return;
+      }
+
+      const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      const fileName = `${Date.now()}-${safeName}`;
+
+      const { error: imgErr } = await client.storage
+        .from("chiikawa-images")
+        .upload(fileName, file);
+
+      if (imgErr) {
+        alert("Upload failed");
+        return;
+      }
+
+      const { data: publicUrl } = client.storage
+        .from("chiikawa-images")
+        .getPublicUrl(fileName);
+
+      const { error: dbErr } = await client
+        .from("items")
+        .insert([{ image_url: publicUrl.publicUrl, description: desc }]);
+
+      if (dbErr) {
+        alert("Save failed");
+        return;
+      }
+
+      alert("Posted");
+      loadItems();
+    }
+
+    async function loadItems() {
+      const gallery = document.getElementById("gallery");
+      gallery.innerHTML = "";
+
+      const { data: items, error: itemsErr } = await client
+        .from("items")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (itemsErr || !items) {
+        return;
+      }
+
+      for (const item of items) {
+        const { data: liked, error: likeErr } = await client
+          .from("likes")
+          .select("*")
+          .eq("item_id", item.id)
+          .eq("user_id", userId);
+
+        const isLiked = !likeErr && Array.isArray(liked) && liked.length > 0;
+
+        const div = document.createElement("div");
+        div.className = "card";
+
+        div.innerHTML = `
+          <img src="${item.image_url}" />
+          <p>${item.description || ""}</p>
+
+          <button class="like-btn" onclick="toggleLike(${item.id})">
+            ${isLiked ? "💖" : "🤍"} ${item.likes ?? 0}
+          </button>
+
+          <button class="delete-btn" onclick="deleteItem(${item.id})">
+            削除
+          </button>
+        `;
+
+        gallery.appendChild(div);
+      }
+    }
+
+    async function toggleLike(itemId) {
+      try {
+        const check = await client
+          .from("likes")
+          .select("*")
+          .eq("item_id", itemId)
+          .eq("user_id", userId);
+
+        if (check.error) {
+          return;
+        }
+
+        const liked = Array.isArray(check.data) && check.data.length > 0;
+
+        if (liked) {
+          const del = await client
+            .from("likes")
+            .delete()
+            .eq("item_id", itemId)
+            .eq("user_id", userId);
+
+          if (del.error) {
+            return;
+          }
+        } else {
+          const ins = await client
+            .from("likes")
+            .insert([{ item_id: itemId, user_id: userId }]);
+
+          if (ins.error) {
+            return;
+          }
+        }
+
+        const cnt = await client
+          .from("likes")
+          .select("*", { count: "exact", head: true })
+          .eq("item_id", itemId);
+
+        if (!cnt.error) {
+          const newCount = cnt.count ?? 0;
+          await client
+            .from("items")
+            .update({ likes: newCount })
+            .eq("id", itemId);
+        }
+
+        await loadItems();
+      } catch (e) {
+        // silent
+      }
+    }
+
+    async function deleteItem(id) {
+      const pass = prompt("Enter delete password");
+
+      if (pass !== "pass") {
+        alert("Incorrect password");
+        return;
+      }
+
+      await client.from("items").delete().eq("id", id);
+      alert("Deleted");
+      loadItems();
+    }
+
+    loadItems();
+  </script>
+
+</body>
+</html>
