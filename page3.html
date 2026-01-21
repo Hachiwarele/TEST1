@@ -48,7 +48,7 @@
       area.style.display = area.style.display === "none" ? "block" : "none";
     }
 
-    async function uploadItem() {
+  async function uploadItem() {
   const file = document.getElementById("imageFile").files[0];
   const desc = document.getElementById("desc").value;
   if (!file) { alert("Please select an image"); return; }
@@ -65,7 +65,8 @@
 
   const insertRes = await client
     .from("items")
-    .insert([{ image_url: publicRes.data.publicUrl, description: desc, gallery: "page3" }]);
+    .insert([{ image_url: publicRes.data.publicUrl, description: desc, gallery: "page3" }])
+    .select(); // ← 返り値を確実に取得するため select() を付ける
   console.log("insertRes", insertRes);
 
   if (insertRes.error) { alert("Save failed"); return; }
