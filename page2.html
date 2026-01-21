@@ -86,9 +86,10 @@ input, textarea {
 
 <button class="add-button" onclick="location.href='index.html'">ページ1に戻る</button>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // Supabase 初期化
-const supabase = supabase.createClient(
+const client = supabase.createClient(
   "https://ygwqpkeopbhztcgzkqke.supabase.co",
   "sb_publishable_yXUDCLKJxQKuMvt1LnDMSg_s8mLrrux"
 );
@@ -111,7 +112,7 @@ async function uploadItem() {
   const fileName = `${Date.now()}-${file.name}`;
 
   // 画像アップロード
-  const { data: imgData, error: imgErr } = await supabase.storage
+  const { data: imgData, error: imgErr } = await client.storage
     .from("chiikawa-images")
     .upload(fileName, file);
 
@@ -121,12 +122,12 @@ async function uploadItem() {
   }
 
   // 公開URL取得
-  const { data: publicUrl } = supabase.storage
+  const { data: publicUrl } = client.storage
     .from("chiikawa-images")
     .getPublicUrl(fileName);
 
   // DBに保存
-  const { error: dbErr } = await supabase
+  const { error: dbErr } = await client
     .from("items")
     .insert([{ image_url: publicUrl.publicUrl, description: desc }]);
 
@@ -144,7 +145,7 @@ async function loadItems() {
   const gallery = document.getElementById("gallery");
   gallery.innerHTML = "";
 
-  const { data: items } = await supabase
+  const { data: items } = await client
     .from("items")
     .select("*")
     .order("created_at", { ascending: false });
@@ -172,13 +173,14 @@ async function deleteItem(id) {
     return;
   }
 
-  await supabase.from("items").delete().eq("id", id);
+  await client.from("items").delete().eq("id", id);
   alert("削除しました");
   loadItems();
 }
 
 loadItems();
 </script>
+
 
 </body>
 </html>
