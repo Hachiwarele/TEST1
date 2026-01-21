@@ -49,32 +49,31 @@
     }
 
     async function uploadItem() {
-      const file = document.getElementById("imageFile").files[0];
-      const desc = document.getElementById("desc").value;
-      if (!file) { alert("Please select an image"); return; }
+  const file = document.getElementById("imageFile").files[0];
+  const desc = document.getElementById("desc").value;
+  if (!file) { alert("Please select an image"); return; }
 
-      const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const fileName = `page3/${Date.now()}-${safeName}`;
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+  const fileName = `page3/${Date.now()}-${safeName}`;
 
-      const { error: imgErr } = await client.storage
-        .from("chiikawa-images")
-        .upload(fileName, file);
+  const uploadRes = await client.storage.from("chiikawa-images").upload(fileName, file);
+  console.log("uploadRes", uploadRes);
+  if (uploadRes.error) { alert("Upload failed"); return; }
 
-      if (imgErr) { alert("Upload failed"); return; }
+  const publicRes = client.storage.from("chiikawa-images").getPublicUrl(fileName);
+  console.log("publicRes", publicRes);
 
-      const { data: publicUrl } = client.storage
-        .from("chiikawa-images")
-        .getPublicUrl(fileName);
+  const insertRes = await client
+    .from("items")
+    .insert([{ image_url: publicRes.data.publicUrl, description: desc, gallery: "page3" }]);
+  console.log("insertRes", insertRes);
 
-      const { error: dbErr } = await client
-        .from("items")
-        .insert([{ image_url: publicUrl.publicUrl, description: desc, gallery: "page3" }]);
+  if (insertRes.error) { alert("Save failed"); return; }
 
-      if (dbErr) { alert("Save failed"); return; }
+  alert("Posted");
+  loadItems();
+}
 
-      alert("Posted");
-      loadItems();
-    }
 
     async function loadItems() {
       const gallery = document.getElementById("gallery");
