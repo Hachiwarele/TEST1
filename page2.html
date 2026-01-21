@@ -3,10 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <title>ちいかわギャラリー</title>
+
   <style>
     body {
       font-family: sans-serif;
       padding: 20px;
+      background: linear-gradient(#cce7ff, #ffffff);
+      min-height: 100vh;
+    }
+
+    #back-btn {
+      display: inline-block;
+      margin-bottom: 20px;
+      padding: 8px 14px;
+      background: #eee;
+      border: 1px solid #aaa;
+      cursor: pointer;
     }
 
     #form-area {
@@ -19,10 +31,13 @@
       padding: 10px;
       margin-bottom: 20px;
       width: 250px;
+      background: white;
+      border-radius: 8px;
     }
 
     .card img {
       width: 100%;
+      border-radius: 6px;
     }
 
     .like-btn {
@@ -50,6 +65,9 @@
 
 <body>
 
+  <!-- ⭐ 戻るボタン復活 -->
+  <button id="back-btn" onclick="location.href='index.html'">← ページに戻る</button>
+
   <h1>ちいかわギャラリー</h1>
 
   <button onclick="toggleForm()">投稿フォームを開く</button>
@@ -66,25 +84,22 @@
     <button onclick="uploadItem()">投稿する</button>
   </div>
 
-  <!-- ⭐ ギャラリー（これが無いと真っ白になる） -->
+  <!-- ギャラリー -->
   <div id="gallery"></div>
 
   <!-- Supabase & JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    // Supabase 初期化
     const client = supabase.createClient(
       "https://ygwqpkeopbhztcgzkqke.supabase.co",
       "sb_publishable_yXUDCLKJxQKuMvt1LnDMSg_s8mLrrux"
     );
 
-    // フォーム表示切り替え
     function toggleForm() {
       const area = document.getElementById("form-area");
       area.style.display = area.style.display === "none" ? "block" : "none";
     }
 
-    // 投稿処理
     async function uploadItem() {
       const file = document.getElementById("imageFile").files[0];
       const desc = document.getElementById("desc").value;
@@ -94,11 +109,9 @@
         return;
       }
 
-      // 日本語ファイル名を安全な名前に変換
       const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
       const fileName = `${Date.now()}-${safeName}`;
 
-      // 画像アップロード
       const { data: imgData, error: imgErr } = await client.storage
         .from("chiikawa-images")
         .upload(fileName, file);
@@ -109,12 +122,10 @@
         return;
       }
 
-      // 公開URL取得
       const { data: publicUrl } = client.storage
         .from("chiikawa-images")
         .getPublicUrl(fileName);
 
-      // DBに保存（likes は 0 で自動）
       const { error: dbErr } = await client
         .from("items")
         .insert([{ image_url: publicUrl.publicUrl, description: desc }]);
@@ -128,7 +139,6 @@
       loadItems();
     }
 
-    // ギャラリー読み込み
     async function loadItems() {
       const gallery = document.getElementById("gallery");
       gallery.innerHTML = "";
@@ -159,7 +169,6 @@
       });
     }
 
-    // いいね処理
     async function likeItem(id, currentLikes) {
       const { error } = await client
         .from("items")
@@ -174,7 +183,6 @@
       loadItems();
     }
 
-    // 削除処理
     async function deleteItem(id) {
       const pass = prompt("削除パスワードを入力してね");
 
