@@ -86,6 +86,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
+    // Supabase 初期化
     const client = supabase.createClient(
       "https://ygwqpkeopbhztcgzkqke.supabase.co",
       "sb_publishable_yXUDCLKJxQKuMvt1LnDMSg_s8mLrrux"
@@ -98,11 +99,13 @@
       localStorage.setItem("user_id", userId);
     }
 
+    // フォーム表示切り替え
     function toggleForm() {
       const area = document.getElementById("form-area");
       area.style.display = area.style.display === "none" ? "block" : "none";
     }
 
+    // 投稿処理
     async function uploadItem() {
       const file = document.getElementById("imageFile").files[0];
       const desc = document.getElementById("desc").value;
@@ -120,6 +123,7 @@
         .upload(fileName, file);
 
       if (imgErr) {
+        console.log("UPLOAD ERROR:", imgErr);
         alert("画像アップロードに失敗しました");
         return;
       }
@@ -133,6 +137,7 @@
         .insert([{ image_url: publicUrl.publicUrl, description: desc }]);
 
       if (dbErr) {
+        console.log("DB INSERT ERROR:", dbErr);
         alert("データ保存に失敗しました");
         return;
       }
@@ -141,24 +146,35 @@
       loadItems();
     }
 
+    // ギャラリー読み込み
     async function loadItems() {
       const gallery = document.getElementById("gallery");
       gallery.innerHTML = "";
 
-      const { data: items } = await client
+      const { data: items, error: itemsErr } = await client
         .from("items")
         .select("*")
         .order("created_at", { ascending: false });
 
+      if (itemsErr) {
+        console.log("items 読み込みエラー:", itemsErr);
+        return;
+      }
+      if (!items) {
+        // データが null の場合は何も描画しない
+        return;
+      }
+
       for (const item of items) {
-        // ★ このユーザーがこの item にいいねしているか確認
-        const { data: liked } = await client
+        // likes テーブルから「このユーザーがこの item をいいねしているか」を確認
+        const { data: liked, error: likeErr } = await client
           .from("likes")
           .select("*")
           .eq("item_id", item.id)
           .eq("user_id", userId);
 
-        const isLiked = liked.length > 0;
+        // liked が null でも落ちないようにガード
+        const isLiked = !likeErr && Array.isArray(liked) && liked.length > 0;
 
         const div = document.createElement("div");
         div.className = "card";
@@ -168,7 +184,7 @@
           <p>${item.description || ""}</p>
 
           <button class="like-btn" onclick="toggleLike(${item.id})">
-            ${isLiked ? "💖" : "🤍"} ${item.likes}
+            ${isLiked ? "💖" : "🤍"} ${item.likes ?? 0}
           </button>
 
           <button class="delete-btn" onclick="deleteItem(${item.id})">
@@ -180,44 +196,47 @@
       }
     }
 
-    // ★ いいねの追加／取り消し
+    // いいねの追加／取り消し
     async function toggleLike(itemId) {
       // すでに押しているか確認
-      const { data: liked } = await client
+      const { data: liked, error: likeErr } = await client
         .from("likes")
         .select("*")
         .eq("item_id", itemId)
         .eq("user_id", userId);
 
-      if (liked.length > 0) {
-        // ★ 押していた → 取り消し
+      if (!likeErr && Array.isArray(liked) && liked.length > 0) {
+        // 押していた → 取り消し
         await client
           .from("likes")
           .delete()
           .eq("item_id", itemId)
           .eq("user_id", userId);
       } else {
-        // ★ 押していない → 追加
+        // 押していない or エラー → 追加（エラー時はとりあえず追加側に倒す）
         await client
           .from("likes")
           .insert([{ item_id: itemId, user_id: userId }]);
       }
 
-      // ★ 最新のいいね数を取得
-      const { count } = await client
+      // 最新のいいね数を取得
+      const { count, error: countErr } = await client
         .from("likes")
         .select("*", { count: "exact", head: true })
         .eq("item_id", itemId);
 
-      // ★ items.likes を更新
-      await client
-        .from("items")
-        .update({ likes: count })
-        .eq("id", itemId);
+      if (!countErr) {
+        // items.likes を更新（count が undefined のときは 0 に）
+        await client
+          .from("items")
+          .update({ likes: count ?? 0 })
+          .eq("id", itemId);
+      }
 
       loadItems();
     }
 
+    // 削除処理
     async function deleteItem(id) {
       const pass = prompt("削除パスワードを入力してね");
 
@@ -231,6 +250,7 @@
       loadItems();
     }
 
+    // 初回読み込み
     loadItems();
   </script>
 
