@@ -128,8 +128,9 @@
         .getPublicUrl(fileName);
 
       const { error: dbErr } = await client
-        .from("items")
-        .insert([{ image_url: publicUrl.publicUrl, description: desc }]);
+  .from("items")
+  .insert([{ image_url: publicUrl.publicUrl, description: desc, gallery: "page2" }]);
+
 
       if (dbErr) {
         alert("Save failed");
