@@ -65,14 +65,12 @@
 
 <body>
 
-  <!-- ⭐ 戻るボタン復活 -->
   <button id="back-btn" onclick="location.href='index.html'">← ページに戻る</button>
 
   <h1>ちいかわギャラリー</h1>
 
   <button onclick="toggleForm()">投稿フォームを開く</button>
 
-  <!-- 投稿フォーム -->
   <div id="form-area">
     <p>画像ファイル：</p>
     <input type="file" id="imageFile" />
@@ -84,16 +82,21 @@
     <button onclick="uploadItem()">投稿する</button>
   </div>
 
-  <!-- ギャラリー -->
   <div id="gallery"></div>
 
-  <!-- Supabase & JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const client = supabase.createClient(
       "https://ygwqpkeopbhztcgzkqke.supabase.co",
       "sb_publishable_yXUDCLKJxQKuMvt1LnDMSg_s8mLrrux"
     );
+
+    // ★ ユーザーIDを localStorage に保存（ログインなしで一人一回を実現）
+    let userId = localStorage.getItem("user_id");
+    if (!userId) {
+      userId = crypto.randomUUID();
+      localStorage.setItem("user_id", userId);
+    }
 
     function toggleForm() {
       const area = document.getElementById("form-area");
@@ -112,12 +115,11 @@
       const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
       const fileName = `${Date.now()}-${safeName}`;
 
-      const { data: imgData, error: imgErr } = await client.storage
+      const { error: imgErr } = await client.storage
         .from("chiikawa-images")
         .upload(fileName, file);
 
       if (imgErr) {
-        console.log("UPLOAD ERROR:", imgErr);
         alert("画像アップロードに失敗しました");
         return;
       }
@@ -148,7 +150,16 @@
         .select("*")
         .order("created_at", { ascending: false });
 
-      items.forEach(item => {
+      for (const item of items) {
+        // ★ このユーザーがこの item にいいねしているか確認
+        const { data: liked } = await client
+          .from("likes")
+          .select("*")
+          .eq("item_id", item.id)
+          .eq("user_id", userId);
+
+        const isLiked = liked.length > 0;
+
         const div = document.createElement("div");
         div.className = "card";
 
@@ -156,8 +167,8 @@
           <img src="${item.image_url}" />
           <p>${item.description || ""}</p>
 
-          <button class="like-btn" onclick="likeItem(${item.id}, ${item.likes})">
-            ❤️ ${item.likes}
+          <button class="like-btn" onclick="toggleLike(${item.id})">
+            ${isLiked ? "💖" : "🤍"} ${item.likes}
           </button>
 
           <button class="delete-btn" onclick="deleteItem(${item.id})">
@@ -166,19 +177,43 @@
         `;
 
         gallery.appendChild(div);
-      });
+      }
     }
 
-    async function likeItem(id, currentLikes) {
-      const { error } = await client
-        .from("items")
-        .update({ likes: currentLikes + 1 })
-        .eq("id", id);
+    // ★ いいねの追加／取り消し
+    async function toggleLike(itemId) {
+      // すでに押しているか確認
+      const { data: liked } = await client
+        .from("likes")
+        .select("*")
+        .eq("item_id", itemId)
+        .eq("user_id", userId);
 
-      if (error) {
-        alert("いいねできなかった…");
-        return;
+      if (liked.length > 0) {
+        // ★ 押していた → 取り消し
+        await client
+          .from("likes")
+          .delete()
+          .eq("item_id", itemId)
+          .eq("user_id", userId);
+      } else {
+        // ★ 押していない → 追加
+        await client
+          .from("likes")
+          .insert([{ item_id: itemId, user_id: userId }]);
       }
+
+      // ★ 最新のいいね数を取得
+      const { count } = await client
+        .from("likes")
+        .select("*", { count: "exact", head: true })
+        .eq("item_id", itemId);
+
+      // ★ items.likes を更新
+      await client
+        .from("items")
+        .update({ likes: count })
+        .eq("id", itemId);
 
       loadItems();
     }
