@@ -237,18 +237,86 @@
     }
 
     // 削除処理
-    async function deleteItem(id) {
-      const pass = prompt("削除パスワードを入力してね");
+    // 改良版 toggleLike（そのまま置き換えて使って）
+async function toggleLike(itemId) {
+  try {
+    console.log("toggleLike start", { itemId, userId });
 
-      if (pass !== "pass") {
-        alert("パスワードが違うよ");
+    // 1) 既存いいね確認
+    const check = await client
+      .from("likes")
+      .select("*")
+      .eq("item_id", itemId)
+      .eq("user_id", userId);
+
+    console.log("check result", check);
+
+    if (check.error) {
+      console.error("likes select error", check.error);
+      alert("いいねの確認でエラーが発生しました。Consoleを確認してね。");
+      return;
+    }
+
+    const liked = Array.isArray(check.data) && check.data.length > 0;
+
+    if (liked) {
+      // 2) 取り消し
+      const del = await client
+        .from("likes")
+        .delete()
+        .eq("item_id", itemId)
+        .eq("user_id", userId);
+
+      console.log("delete result", del);
+      if (del.error) {
+        console.error("likes delete error", del.error);
+        alert("いいねの取り消しに失敗しました。Consoleを確認してね。");
         return;
       }
+    } else {
+      // 3) 追加
+      const ins = await client
+        .from("likes")
+        .insert([{ item_id: itemId, user_id: userId }]);
 
-      await client.from("items").delete().eq("id", id);
-      alert("削除しました");
-      loadItems();
+      console.log("insert result", ins);
+      if (ins.error) {
+        console.error("likes insert error", ins.error);
+        alert("いいねの追加に失敗しました。Consoleを確認してね。");
+        return;
+      }
     }
+
+    // 4) カウント取得
+    const cnt = await client
+      .from("likes")
+      .select("*", { count: "exact", head: true })
+      .eq("item_id", itemId);
+
+    console.log("count result", cnt);
+    if (cnt.error) {
+      console.error("count error", cnt.error);
+    } else {
+      const newCount = cnt.count ?? 0;
+      const upd = await client
+        .from("items")
+        .update({ likes: newCount })
+        .eq("id", itemId);
+
+      console.log("items update result", upd);
+      if (upd.error) {
+        console.error("items update error", upd.error);
+      }
+    }
+
+    // 5) 再描画
+    await loadItems();
+  } catch (e) {
+    console.error("toggleLike unexpected error", e);
+    alert("予期せぬエラーが発生しました。Consoleを確認してね。");
+  }
+}
+
 
     // 初回読み込み
     loadItems();
