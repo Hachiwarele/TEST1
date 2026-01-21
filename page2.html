@@ -1,120 +1,195 @@
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-// Supabase 初期化
-const client = supabase.createClient(
-  "https://ygwqpkeopbhztcgzkqke.supabase.co",
-  "sb_publishable_yXUDCLKJxQKuMvt1LnDMSg_s8mLrrux"
-);
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>ちいかわギャラリー</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
 
-// フォーム表示切り替え
-function toggleForm() {
-  const area = document.getElementById("form-area");
-  area.style.display = area.style.display === "none" ? "block" : "none";
-}
+    #form-area {
+      display: none;
+      margin-bottom: 20px;
+    }
 
-// 投稿処理
-async function uploadItem() {
-  const file = document.getElementById("imageFile").files[0];
-  const desc = document.getElementById("desc").value;
+    .card {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 20px;
+      width: 250px;
+    }
 
-  if (!file) {
-    alert("画像を選んでね");
-    return;
-  }
+    .card img {
+      width: 100%;
+    }
 
-  // 日本語ファイル名を安全な名前に変換
-  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-  const fileName = `${Date.now()}-${safeName}`;
+    .like-btn {
+      background: #ffdddd;
+      border: 1px solid #ffaaaa;
+      padding: 5px 10px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
 
-  // 画像アップロード
-  const { data: imgData, error: imgErr } = await client.storage
-    .from("chiikawa-images")
-    .upload(fileName, file);
+    .delete-btn {
+      background: #ddd;
+      border: 1px solid #aaa;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
 
-  if (imgErr) {
-    console.log("UPLOAD ERROR:", imgErr);
-    alert("画像アップロードに失敗しました");
-    return;
-  }
+    #gallery {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+  </style>
+</head>
 
-  // 公開URL取得
-  const { data: publicUrl } = client.storage
-    .from("chiikawa-images")
-    .getPublicUrl(fileName);
+<body>
 
-  // DBに保存（likes は 0 で自動）
-  const { error: dbErr } = await client
-    .from("items")
-    .insert([{ image_url: publicUrl.publicUrl, description: desc }]);
+  <h1>ちいかわギャラリー</h1>
 
-  if (dbErr) {
-    alert("データ保存に失敗しました");
-    return;
-  }
+  <button onclick="toggleForm()">投稿フォームを開く</button>
 
-  alert("投稿完了！");
-  loadItems();
-}
+  <!-- 投稿フォーム -->
+  <div id="form-area">
+    <p>画像ファイル：</p>
+    <input type="file" id="imageFile" />
 
-// ギャラリー読み込み
-async function loadItems() {
-  const gallery = document.getElementById("gallery");
-  gallery.innerHTML = "";
+    <p>説明：</p>
+    <input type="text" id="desc" />
 
-  const { data: items } = await client
-    .from("items")
-    .select("*")
-    .order("created_at", { ascending: false });
+    <br><br>
+    <button onclick="uploadItem()">投稿する</button>
+  </div>
 
-  items.forEach(item => {
-    const div = document.createElement("div");
-    div.className = "card";
+  <!-- ⭐ ギャラリー（これが無いと真っ白になる） -->
+  <div id="gallery"></div>
 
-    div.innerHTML = `
-      <img src="${item.image_url}" />
-      <p>${item.description || ""}</p>
+  <!-- Supabase & JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // Supabase 初期化
+    const client = supabase.createClient(
+      "https://ygwqpkeopbhztcgzkqke.supabase.co",
+      "sb_publishable_yXUDCLKJxQKuMvt1LnDMSg_s8mLrrux"
+    );
 
-      <button class="like-btn" onclick="likeItem(${item.id}, ${item.likes})">
-        ❤️ ${item.likes}
-      </button>
+    // フォーム表示切り替え
+    function toggleForm() {
+      const area = document.getElementById("form-area");
+      area.style.display = area.style.display === "none" ? "block" : "none";
+    }
 
-      <button class="delete-btn" onclick="deleteItem(${item.id})">
-        削除
-      </button>
-    `;
+    // 投稿処理
+    async function uploadItem() {
+      const file = document.getElementById("imageFile").files[0];
+      const desc = document.getElementById("desc").value;
 
-    gallery.appendChild(div);
-  });
-}
+      if (!file) {
+        alert("画像を選んでね");
+        return;
+      }
 
-// いいね処理
-async function likeItem(id, currentLikes) {
-  const { error } = await client
-    .from("items")
-    .update({ likes: currentLikes + 1 })
-    .eq("id", id);
+      // 日本語ファイル名を安全な名前に変換
+      const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      const fileName = `${Date.now()}-${safeName}`;
 
-  if (error) {
-    alert("いいねできなかった…");
-    return;
-  }
+      // 画像アップロード
+      const { data: imgData, error: imgErr } = await client.storage
+        .from("chiikawa-images")
+        .upload(fileName, file);
 
-  loadItems();
-}
+      if (imgErr) {
+        console.log("UPLOAD ERROR:", imgErr);
+        alert("画像アップロードに失敗しました");
+        return;
+      }
 
-// 削除処理
-async function deleteItem(id) {
-  const pass = prompt("削除パスワードを入力してね");
+      // 公開URL取得
+      const { data: publicUrl } = client.storage
+        .from("chiikawa-images")
+        .getPublicUrl(fileName);
 
-  if (pass !== "pass") {
-    alert("パスワードが違うよ");
-    return;
-  }
+      // DBに保存（likes は 0 で自動）
+      const { error: dbErr } = await client
+        .from("items")
+        .insert([{ image_url: publicUrl.publicUrl, description: desc }]);
 
-  await client.from("items").delete().eq("id", id);
-  alert("削除しました");
-  loadItems();
-}
+      if (dbErr) {
+        alert("データ保存に失敗しました");
+        return;
+      }
 
-loadItems();
-</script>
+      alert("投稿完了！");
+      loadItems();
+    }
+
+    // ギャラリー読み込み
+    async function loadItems() {
+      const gallery = document.getElementById("gallery");
+      gallery.innerHTML = "";
+
+      const { data: items } = await client
+        .from("items")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      items.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "card";
+
+        div.innerHTML = `
+          <img src="${item.image_url}" />
+          <p>${item.description || ""}</p>
+
+          <button class="like-btn" onclick="likeItem(${item.id}, ${item.likes})">
+            ❤️ ${item.likes}
+          </button>
+
+          <button class="delete-btn" onclick="deleteItem(${item.id})">
+            削除
+          </button>
+        `;
+
+        gallery.appendChild(div);
+      });
+    }
+
+    // いいね処理
+    async function likeItem(id, currentLikes) {
+      const { error } = await client
+        .from("items")
+        .update({ likes: currentLikes + 1 })
+        .eq("id", id);
+
+      if (error) {
+        alert("いいねできなかった…");
+        return;
+      }
+
+      loadItems();
+    }
+
+    // 削除処理
+    async function deleteItem(id) {
+      const pass = prompt("削除パスワードを入力してね");
+
+      if (pass !== "pass") {
+        alert("パスワードが違うよ");
+        return;
+      }
+
+      await client.from("items").delete().eq("id", id);
+      alert("削除しました");
+      loadItems();
+    }
+
+    loadItems();
+  </script>
+
+</body>
+</html>
