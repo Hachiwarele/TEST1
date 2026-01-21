@@ -1,53 +1,184 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>海のページ2</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ちいかわギャラリー</title>
 
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background: #6A8BC3;
-      font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
-      text-align: center;
-      color: #ffffff;
-    }
+<style>
+body {
+  font-family: sans-serif;
+  background: #eef7ff;
+  padding: 20px;
+}
 
-    h1 {
-      margin-top: 80px;
-      font-size: 46px;
-    }
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
 
-    p {
-      font-size: 20px;
-      margin-top: 20px;
-    }
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
 
-    .back-button {
-      display: inline-block;
-      margin-top: 60px;
-      padding: 15px 30px;
-      background: #4f6fa3;
-      color: white;
-      border-radius: 30px;
-      text-decoration: none;
-      font-size: 20px;
-      transition: 0.3s;
-    }
+.card img {
+  width: 100%;
+  border-radius: 12px;
+}
 
-    .back-button:hover {
-      background: #3d5a8a;
-    }
-  </style>
+.add-button {
+  margin: 20px 0;
+  padding: 10px 20px;
+  background: #4da3ff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#form-area {
+  display: none;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+}
+
+input, textarea {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+.delete-btn {
+  margin-top: 8px;
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
 
-  <h1>海のページ２ 🐬</h1>
-  <p>ここは静かな世界</p>
+<h1>ちいかわギャラリー</h1>
 
-  <a href="index.html" class="back-button">もどる ←</a>
+<button class="add-button" onclick="toggleForm()">＋ 追加する</button>
+
+<div id="form-area">
+  <input type="file" id="imageFile" accept="image/*" />
+  <textarea id="desc" placeholder="説明文（任意）"></textarea>
+  <button class="add-button" onclick="uploadItem()">投稿する</button>
+</div>
+
+<div class="gallery" id="gallery"></div>
+
+<button class="add-button" onclick="location.href='index.html'">ページ1に戻る</button>
+
+<script>
+// Supabase 初期化
+const supabase = supabase.createClient(
+  "https://ygwqpkeopbhztcgzkqke.supabase.co",
+  "sb_publishable_yXUDCLKJxQKuMvt1LnDMSg_s8mLrrux"
+);
+
+function toggleForm() {
+  const area = document.getElementById("form-area");
+  area.style.display = area.style.display === "none" ? "block" : "none";
+}
+
+// 投稿処理
+async function uploadItem() {
+  const file = document.getElementById("imageFile").files[0];
+  const desc = document.getElementById("desc").value;
+
+  if (!file) {
+    alert("画像を選んでね");
+    return;
+  }
+
+  const fileName = `${Date.now()}-${file.name}`;
+
+  // 画像アップロード
+  const { data: imgData, error: imgErr } = await supabase.storage
+    .from("chiikawa-images")
+    .upload(fileName, file);
+
+  if (imgErr) {
+    alert("画像アップロードに失敗しました");
+    return;
+  }
+
+  // 公開URL取得
+  const { data: publicUrl } = supabase.storage
+    .from("chiikawa-images")
+    .getPublicUrl(fileName);
+
+  // DBに保存
+  const { error: dbErr } = await supabase
+    .from("items")
+    .insert([{ image_url: publicUrl.publicUrl, description: desc }]);
+
+  if (dbErr) {
+    alert("データ保存に失敗しました");
+    return;
+  }
+
+  alert("投稿完了！");
+  loadItems();
+}
+
+// ギャラリー読み込み
+async function loadItems() {
+  const gallery = document.getElementById("gallery");
+  gallery.innerHTML = "";
+
+  const { data: items } = await supabase
+    .from("items")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  items.forEach(item => {
+    const div = document.createElement("div");
+    div.className = "card";
+
+    div.innerHTML = `
+      <img src="${item.image_url}" />
+      <p>${item.description || ""}</p>
+      <button class="delete-btn" onclick="deleteItem(${item.id})">削除</button>
+    `;
+
+    gallery.appendChild(div);
+  });
+}
+
+// 削除処理
+async function deleteItem(id) {
+  const pass = prompt("削除パスワードを入力してね");
+
+  if (pass !== "pass") {
+    alert("パスワードが違うよ");
+    return;
+  }
+
+  await supabase.from("items").delete().eq("id", id);
+  alert("削除しました");
+  loadItems();
+}
+
+loadItems();
+</script>
 
 </body>
 </html>
