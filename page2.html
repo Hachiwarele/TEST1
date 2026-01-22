@@ -60,6 +60,28 @@
       flex-wrap: wrap;
       gap: 20px;
     }
+
+    /* モーダル用スタイル */
+    #viewerModal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); z-index: 9999; padding: 20px; }
+    #viewerContent { background: #fff; max-width: 1100px; width: 100%; max-height: 90vh; overflow: auto; border-radius: 10px; padding: 16px; box-sizing: border-box; }
+    #viewerImage { display: block; max-width: 100%; height: auto; margin: 0 auto 12px auto; border-radius: 6px; }
+
+    .sheet-controls { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+    .sheet-controls button { padding:6px 10px; cursor:pointer; }
+
+    #sheetWrap { overflow:auto; border:1px solid #ddd; border-radius:6px; padding:8px; background:#fafafa; }
+    table.sheet { border-collapse: collapse; width: max-content; min-width:100%; table-layout: auto; }
+    table.sheet td, table.sheet th { border:1px solid #ddd; padding:6px 8px; min-width:40px; white-space:nowrap; vertical-align: middle; }
+    table.sheet td { background:#fff; }
+    table.sheet th[contenteditable="true"]:focus, table.sheet td[contenteditable="true"]:focus { outline:2px solid #9ad; }
+
+    .viewer-footer { display:flex; justify-content:space-between; margin-top:12px; gap:8px; flex-wrap:wrap; }
+    .viewer-footer button { padding:8px 12px; cursor:pointer; }
+
+    @media (max-width:600px) {
+      #viewerContent { padding:10px; }
+      .sheet-controls { gap:6px; }
+    }
   </style>
 </head>
 
@@ -86,10 +108,14 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
+    // Supabase client
     const client = supabase.createClient(
       "https://ygwqpkeopbhztcgzkqke.supabase.co",
       "sb_publishable_yXUDCLKJxQKuMvt1LnDMSg_s8mLrrux"
     );
+
+    // viewerState global (holds current item, sheetData, and channel)
+    const viewerState = { currentItem: null, sheetData: null, sheetChannel: null };
 
     let userId = localStorage.getItem("user_id");
     if (!userId) {
@@ -128,9 +154,8 @@
         .getPublicUrl(fileName);
 
       const { error: dbErr } = await client
-  .from("items")
-  .insert([{ image_url: publicUrl.publicUrl, description: desc, gallery: "page2" }]);
-
+        .from("items")
+        .insert([{ image_url: publicUrl.publicUrl, description: desc, gallery: "page2" }]);
 
       if (dbErr) {
         alert("Save failed");
@@ -145,12 +170,11 @@
       const gallery = document.getElementById("gallery");
       gallery.innerHTML = "";
 
-const { data: items, error: itemsErr } = await client
-  .from("items")
-  .select("*")
-  .eq("gallery", "page2")
-  .order("created_at", { ascending: false });
-
+      const { data: items, error: itemsErr } = await client
+        .from("items")
+        .select("*")
+        .eq("gallery", "page2")
+        .order("created_at", { ascending: false });
 
       if (itemsErr || !items) {
         return;
@@ -169,14 +193,11 @@ const { data: items, error: itemsErr } = await client
         div.className = "card";
 
         div.innerHTML = `
- <img src="${item.image_url}" style="cursor:pointer" onclick='openViewer(${JSON.stringify(item)})' />
-
+          <img src="${item.image_url}" style="cursor:pointer" onclick='openViewer(${JSON.stringify(item)})' />
           <p>${item.description || ""}</p>
-
           <button class="like-btn" onclick="toggleLike(${item.id})">
             ${isLiked ? "💖" : "🤍"} ${item.likes ?? 0}
           </button>
-
           <button class="delete-btn" onclick="deleteItem(${item.id})">
             削除
           </button>
@@ -253,343 +274,383 @@ const { data: items, error: itemsErr } = await client
     }
 
     loadItems();
-  </script>
 
+    /* ---------- ユーティリティ: テキスト幅測定 ---------- */
+    function measureTextWidth(text, font = "14px sans-serif") {
+      const ctx = measureTextWidth._ctx || (measureTextWidth._ctx = document.createElement("canvas").getContext("2d"));
+      ctx.font = font;
+      return ctx.measureText(String(text)).width;
+    }
 
-  <!-- モーダル用スタイルと要素（差し替え用） -->
-<style>
-  #viewerModal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); z-index: 9999; padding: 20px; }
-  #viewerContent { background: #fff; max-width: 1100px; width: 100%; max-height: 90vh; overflow: auto; border-radius: 10px; padding: 16px; box-sizing: border-box; }
-  #viewerImage { display: block; max-width: 100%; height: auto; margin: 0 auto 12px auto; border-radius: 6px; }
+    /* ---------- モーダル要素（HTMLは下にある） ---------- */
 
-  .sheet-controls { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
-  .sheet-controls button { padding:6px 10px; cursor:pointer; }
+    /* ---------- debounce とサーバー保存（upsert） ---------- */
+    function debounce(fn, wait = 600) {
+      let t;
+      return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), wait);
+      };
+    }
 
-  #sheetWrap { overflow:auto; border:1px solid #ddd; border-radius:6px; padding:8px; background:#fafafa; }
-  table.sheet { border-collapse: collapse; width: max-content; min-width:100%; table-layout: auto; }
-  table.sheet td, table.sheet th { border:1px solid #ddd; padding:6px 8px; min-width:40px; white-space:nowrap; vertical-align: middle; }
-  table.sheet td { background:#fff; }
-  table.sheet th[contenteditable="true"]:focus, table.sheet td[contenteditable="true"]:focus { outline:2px solid #9ad; }
+    async function saveSheetToServer() {
+      const item = viewerState.currentItem;
+      if (!item) { updateStatus("保存できません: アイテム未選択"); return; }
 
-  .viewer-footer { display:flex; justify-content:space-between; margin-top:12px; gap:8px; flex-wrap:wrap; }
-  .viewer-footer button { padding:8px 12px; cursor:pointer; }
+      // 更新時刻を付与
+      viewerState.sheetData.updated_at = new Date().toISOString();
 
-  /* 小さい画面での見切れ対策 */
-  @media (max-width:600px) {
-    #viewerContent { padding:10px; }
-    .sheet-controls { gap:6px; }
-  }
-</style>
+      const payload = {
+        item_id: item.id,
+        sheet: viewerState.sheetData,
+        updated_at: viewerState.sheetData.updated_at
+      };
 
-<div id="viewerModal" aria-hidden="true">
-  <div id="viewerContent" role="dialog" aria-modal="true">
-    <img id="viewerImage" src="" alt="preview" />
-    <div class="sheet-controls">
-      <button id="addRowBtn">行を追加</button>
-      <button id="delRowBtn">行を削除</button>
-      <button id="addColBtn">列を追加</button>
-      <button id="delColBtn">列を削除</button>
-      <button id="autoSizeBtn">列幅自動調整</button>
-      <button id="saveSheetBtn">保存</button>
-      <button id="closeViewerBtn" style="margin-left:auto">閉じる</button>
-    </div>
-    <div id="sheetWrap">
-      <table id="sheetTable" class="sheet"></table>
-    </div>
-    <div class="viewer-footer">
-      <div id="metaInfo"></div>
-      <div id="sheetStatus"></div>
-    </div>
-  </div>
-</div>
+      const { data, error } = await client
+        .from("item_sheets")
+        .upsert(payload, { returning: "representation" });
 
-<script>
-/* ---------- データモデル（拡張） ---------- */
-/* sheetData: { id: item.id, cols: n, rows: [ [cell,...], ... ], colHeaders: [...], rowHeaders: [...] } */
-const viewerState = { currentItem: null, sheetData: null };
+      if (error) {
+        console.error("upsert error", error);
+        updateStatus("保存に失敗しました");
+        return;
+      }
 
-/* テキスト幅測定 */
-function measureTextWidth(text, font = "14px sans-serif") {
-  const ctx = measureTextWidth._ctx || (measureTextWidth._ctx = document.createElement("canvas").getContext("2d"));
-  ctx.font = font;
-  return ctx.measureText(String(text)).width;
-}
+      // localStorage も更新しておく（オフライン対応）
+      localStorage.setItem(`sheet_item_${item.id}`, JSON.stringify(viewerState.sheetData));
+      updateStatus("サーバーに保存しました");
+    }
 
-/* ---------- モーダル操作 ---------- */
-// openViewer を差し替え（既存の openViewer と置き換え）
-function openViewer(item) {
-  // 既存状態をクリアしてから開始
-  viewerState.currentItem = null;
-  viewerState.sheetData = null;
+    const debouncedSave = debounce(saveSheetToServer, 700);
 
-  viewerState.currentItem = item;
+    /* ---------- Realtime 購読（start / stop） ---------- */
+    async function startSheetSubscription(item) {
+      // 既存購読があれば解除
+      if (viewerState.sheetChannel) {
+        try { await viewerState.sheetChannel.unsubscribe(); } catch(e){ console.warn(e); }
+        viewerState.sheetChannel = null;
+      }
 
-  // 画像表示
-  const img = document.getElementById("viewerImage");
-  img.src = item.image_url;
+      const channelName = `sheet-${item.id}`;
+      const channel = client
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "item_sheets", filter: `item_id=eq.${item.id}` },
+          (payload) => {
+            if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+              if (payload.new && payload.new.sheet) {
+                const remoteTs = payload.new.updated_at ? new Date(payload.new.updated_at).getTime() : 0;
+                const localTs = viewerState.sheetData?.updated_at ? new Date(viewerState.sheetData.updated_at).getTime() : 0;
+                if (remoteTs <= localTs) return;
+                try {
+                  viewerState.sheetData = payload.new.sheet;
+                  renderSheet();
+                  updateStatus("他端末の変更を受信しました");
+                } catch (e) {
+                  console.error("受信データ処理エラー", e);
+                }
+              }
+            } else if (payload.eventType === "DELETE") {
+              viewerState.sheetData = { id: item.id, cols: 1, rows: [[""]], colHeaders: ["A"], rowHeaders: ["1"] };
+              renderSheet();
+              updateStatus("シートが削除されました");
+            }
+          }
+        );
 
-  // メタ情報
-  document.getElementById("metaInfo").textContent = `ID: ${item.id}  説明: ${item.description || ""}`;
+      await channel.subscribe();
+      viewerState.sheetChannel = channel;
+    }
 
-  // 画像ごとのキーで読み込む
-  const key = `sheet_item_${item.id}`;
-  const saved = localStorage.getItem(key);
-  if (saved) {
-    try {
-      viewerState.sheetData = JSON.parse(saved);
-    } catch (e) {
+    async function stopSheetSubscription() {
+      if (viewerState.sheetChannel) {
+        try { await viewerState.sheetChannel.unsubscribe(); } catch (e) { console.warn(e); }
+        viewerState.sheetChannel = null;
+      }
+      viewerState.currentItem = null;
       viewerState.sheetData = null;
     }
-  }
 
-  // 保存データがなければ新規初期化（3x3）
-  if (!viewerState.sheetData) {
-    const rows = [["", "", ""], ["", "", ""], ["", "", ""]];
-    const cols = 3;
-    const colHeaders = Array.from({ length: cols }, (_, i) => String.fromCharCode(65 + i));
-    const rowHeaders = Array.from({ length: rows.length }, (_, i) => String(i + 1));
-    viewerState.sheetData = { id: item.id, rows, cols, colHeaders, rowHeaders };
-  }
+    /* ---------- モーダル操作（openViewer / close / save） ---------- */
+    async function openViewer(item) {
+      // 既存状態をクリアしてから開始
+      viewerState.currentItem = null;
+      viewerState.sheetData = null;
 
-  renderSheet();
-  document.getElementById("viewerModal").style.display = "flex";
-  document.getElementById("viewerModal").setAttribute("aria-hidden", "false");
-}
+      viewerState.currentItem = item;
 
-// 保存ボタンハンドラを差し替え（既存の save handler と置き換え）
-document.getElementById("saveSheetBtn").addEventListener("click", () => {
-  const item = viewerState.currentItem;
-  if (!item) {
-    updateStatus("保存できません: アイテムが選択されていません");
-    return;
-  }
-  const key = `sheet_item_${item.id}`;
-  localStorage.setItem(key, JSON.stringify(viewerState.sheetData));
-  updateStatus("保存しました");
+      // 画像表示
+      const img = document.getElementById("viewerImage");
+      img.src = item.image_url;
 
-  // もし Supabase に保存したい場合はここで upsert を呼ぶ
-  // 例（コメント解除して利用）
-  // await client.from("item_sheets").upsert([{ item_id: item.id, sheet: viewerState.sheetData }]);
-});
+      // メタ情報
+      document.getElementById("metaInfo").textContent = `ID: ${item.id}  説明: ${item.description || ""}`;
 
-// 閉じる時に状態をクリアする（既存の close handler に追加）
-document.getElementById("closeViewerBtn").addEventListener("click", () => {
-  document.getElementById("viewerModal").style.display = "none";
-  document.getElementById("viewerModal").setAttribute("aria-hidden", "true");
-  // 明示的に状態をクリアして次回の混在を防ぐ
-  viewerState.currentItem = null;
-  viewerState.sheetData = null;
-});
+      // 画像ごとのキーで読み込む（localStorage 優先）
+      const key = `sheet_item_${item.id}`;
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        try {
+          viewerState.sheetData = JSON.parse(saved);
+        } catch (e) {
+          viewerState.sheetData = null;
+        }
+      }
 
+      // 保存データがなければ新規初期化（3x3）
+      if (!viewerState.sheetData) {
+        const rows = [["", "", ""], ["", "", ""], ["", "", ""]];
+        const cols = 3;
+        const colHeaders = Array.from({ length: cols }, (_, i) => String.fromCharCode(65 + i));
+        const rowHeaders = Array.from({ length: rows.length }, (_, i) => String(i + 1));
+        viewerState.sheetData = { id: item.id, rows, cols, colHeaders, rowHeaders };
+      }
 
-/* Esc で閉じる */
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    const modal = document.getElementById("viewerModal");
-    if (modal.style.display === "flex") {
-      modal.style.display = "none";
-      modal.setAttribute("aria-hidden", "true");
+      renderSheet();
+      document.getElementById("viewerModal").style.display = "flex";
+      document.getElementById("viewerModal").setAttribute("aria-hidden", "false");
+
+      // 購読開始（Realtime）
+      await startSheetSubscription(item);
     }
-  }
-});
 
-/* ---------- シート描画と編集 ---------- */
-function renderSheet() {
-  const table = document.getElementById("sheetTable");
-  table.innerHTML = "";
-  const data = viewerState.sheetData;
-  if (!data) return;
+    // 保存ボタン（サーバー保存に紐づけ）
+    document.getElementById("saveSheetBtn").addEventListener("click", debouncedSave);
 
-  // thead
-  const thead = document.createElement("thead");
-  const headRow = document.createElement("tr");
-  const corner = document.createElement("th");
-  corner.textContent = "";
-  headRow.appendChild(corner);
+    // 閉じるボタン（購読解除して状態クリア）
+    document.getElementById("closeViewerBtn").addEventListener("click", async () => {
+      document.getElementById("viewerModal").style.display = "none";
+      document.getElementById("viewerModal").setAttribute("aria-hidden", "true");
+      await stopSheetSubscription();
+    });
 
-  for (let c = 0; c < data.cols; c++) {
-    const th = document.createElement("th");
-    th.contentEditable = "true";
-    th.dataset.c = c;
-    th.className = "col-header";
-    th.textContent = data.colHeaders && data.colHeaders[c] != null ? data.colHeaders[c] : String.fromCharCode(65 + (c % 26));
-    th.addEventListener("input", onColHeaderInput);
-    headRow.appendChild(th);
-  }
-  thead.appendChild(headRow);
-  table.appendChild(thead);
+    // Esc で閉じる
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        const modal = document.getElementById("viewerModal");
+        if (modal.style.display === "flex") {
+          modal.style.display = "none";
+          modal.setAttribute("aria-hidden", "true");
+          stopSheetSubscription();
+        }
+      }
+    });
 
-  // tbody
-  const tbody = document.createElement("tbody");
-  for (let r = 0; r < data.rows.length; r++) {
-    const tr = document.createElement("tr");
-    const rowHeader = document.createElement("th");
-    rowHeader.contentEditable = "true";
-    rowHeader.dataset.r = r;
-    rowHeader.className = "row-header";
-    rowHeader.textContent = data.rowHeaders && data.rowHeaders[r] != null ? data.rowHeaders[r] : String(r+1);
-    rowHeader.addEventListener("input", onRowHeaderInput);
-    tr.appendChild(rowHeader);
+    /* ---------- シート描画と編集 ---------- */
+    function renderSheet() {
+      const table = document.getElementById("sheetTable");
+      table.innerHTML = "";
+      const data = viewerState.sheetData;
+      if (!data) return;
 
-    for (let c = 0; c < data.cols; c++) {
-      const td = document.createElement("td");
-      td.contentEditable = "true";
-      td.dataset.r = r;
-      td.dataset.c = c;
-      td.textContent = (data.rows[r] && data.rows[r][c] != null) ? data.rows[r][c] : "";
-      td.addEventListener("input", onCellInput);
-      tr.appendChild(td);
+      // thead
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      const corner = document.createElement("th");
+      corner.textContent = "";
+      headRow.appendChild(corner);
+
+      for (let c = 0; c < data.cols; c++) {
+        const th = document.createElement("th");
+        th.contentEditable = "true";
+        th.dataset.c = c;
+        th.className = "col-header";
+        th.textContent = data.colHeaders && data.colHeaders[c] != null ? data.colHeaders[c] : String.fromCharCode(65 + (c % 26));
+        th.addEventListener("input", onColHeaderInput);
+        headRow.appendChild(th);
+      }
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      // tbody
+      const tbody = document.createElement("tbody");
+      for (let r = 0; r < data.rows.length; r++) {
+        const tr = document.createElement("tr");
+        const rowHeader = document.createElement("th");
+        rowHeader.contentEditable = "true";
+        rowHeader.dataset.r = r;
+        rowHeader.className = "row-header";
+        rowHeader.textContent = data.rowHeaders && data.rowHeaders[r] != null ? data.rowHeaders[r] : String(r+1);
+        rowHeader.addEventListener("input", onRowHeaderInput);
+        tr.appendChild(rowHeader);
+
+        for (let c = 0; c < data.cols; c++) {
+          const td = document.createElement("td");
+          td.contentEditable = "true";
+          td.dataset.r = r;
+          td.dataset.c = c;
+          td.textContent = (data.rows[r] && data.rows[r][c] != null) ? data.rows[r][c] : "";
+          td.addEventListener("input", onCellInput);
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+
+      autoSizeColumns();
+      updateStatus("編集可能");
     }
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
 
-  autoSizeColumns();
-  updateStatus("編集可能");
-}
-
-/* セル編集 */
-function onCellInput(e) {
-  const td = e.target;
-  const r = Number(td.dataset.r);
-  const c = Number(td.dataset.c);
-  const val = td.textContent;
-  const data = viewerState.sheetData;
-  if (!data.rows[r]) data.rows[r] = [];
-  data.rows[r][c] = val;
-  autoSizeColumns();
-}
-
-/* 列ヘッダ編集 */
-function onColHeaderInput(e) {
-  const th = e.target;
-  const c = Number(th.dataset.c);
-  const val = th.textContent;
-  const data = viewerState.sheetData;
-  data.colHeaders = data.colHeaders || [];
-  data.colHeaders[c] = val;
-  autoSizeColumns();
-}
-
-/* 行ヘッダ編集 */
-function onRowHeaderInput(e) {
-  const th = e.target;
-  const r = Number(th.dataset.r);
-  const val = th.textContent;
-  const data = viewerState.sheetData;
-  data.rowHeaders = data.rowHeaders || [];
-  data.rowHeaders[r] = val;
-}
-
-/* 列幅自動調整（上限を設ける） */
-function autoSizeColumns() {
-  const table = document.getElementById("sheetTable");
-  const data = viewerState.sheetData;
-  if (!data) return;
-
-  const maxColWidth = 300; // 列幅の上限（px）
-  const minColWidth = 40;
-  const colWidths = new Array(data.cols).fill(minColWidth);
-
-  // ヘッダ幅
-  for (let c = 0; c < data.cols; c++) {
-    const header = (data.colHeaders && data.colHeaders[c]) ? data.colHeaders[c] : String.fromCharCode(65 + (c % 26));
-    colWidths[c] = Math.max(colWidths[c], measureTextWidth(header) + 24);
-  }
-
-  // セル幅
-  for (let r = 0; r < data.rows.length; r++) {
-    for (let c = 0; c < data.cols; c++) {
-      const v = (data.rows[r] && data.rows[r][c] != null) ? String(data.rows[r][c]) : "";
-      const w = measureTextWidth(v) + 24;
-      if (w > colWidths[c]) colWidths[c] = w;
+    function onCellInput(e) {
+      const td = e.target;
+      const r = Number(td.dataset.r);
+      const c = Number(td.dataset.c);
+      const val = td.textContent;
+      const data = viewerState.sheetData;
+      if (!data.rows[r]) data.rows[r] = [];
+      data.rows[r][c] = val;
+      autoSizeColumns();
     }
-  }
 
-  // 上限を適用
-  for (let c = 0; c < colWidths.length; c++) {
-    if (colWidths[c] > maxColWidth) colWidths[c] = maxColWidth;
-  }
+    function onColHeaderInput(e) {
+      const th = e.target;
+      const c = Number(th.dataset.c);
+      const val = th.textContent;
+      const data = viewerState.sheetData;
+      data.colHeaders = data.colHeaders || [];
+      data.colHeaders[c] = val;
+      autoSizeColumns();
+    }
 
-  // colgroup を作る
-  let colgroup = table.querySelector("colgroup");
-  if (colgroup) colgroup.remove();
-  colgroup = document.createElement("colgroup");
-  for (let c = 0; c < data.cols; c++) {
-    const col = document.createElement("col");
-    col.style.width = colWidths[c] + "px";
-    colgroup.appendChild(col);
-  }
-  table.insertBefore(colgroup, table.firstChild);
+    function onRowHeaderInput(e) {
+      const th = e.target;
+      const r = Number(th.dataset.r);
+      const val = th.textContent;
+      const data = viewerState.sheetData;
+      data.rowHeaders = data.rowHeaders || [];
+      data.rowHeaders[r] = val;
+    }
 
-  // テーブル全体幅を設定（合計幅）。これで最後の列が勝手に伸びるのを防ぐ。
-  const total = colWidths.reduce((a,b)=>a+b, 0) + 60; // 余白分
-  table.style.width = total + "px";
-}
+    function autoSizeColumns() {
+      const table = document.getElementById("sheetTable");
+      const data = viewerState.sheetData;
+      if (!data) return;
 
-/* 行追加 */
-document.getElementById("addRowBtn").addEventListener("click", () => {
-  const data = viewerState.sheetData;
-  const newRow = new Array(data.cols).fill("");
-  data.rows.push(newRow);
-  data.rowHeaders = data.rowHeaders || [];
-  data.rowHeaders.push(String(data.rows.length));
-  renderSheet();
-});
+      const maxColWidth = 300; // 列幅の上限（px）
+      const minColWidth = 40;
+      const colWidths = new Array(data.cols).fill(minColWidth);
 
-/* 行削除 */
-document.getElementById("delRowBtn").addEventListener("click", () => {
-  const data = viewerState.sheetData;
-  if (data.rows.length <= 1) { updateStatus("行は最低1行必要です"); return; }
-  data.rows.pop();
-  data.rowHeaders.pop();
-  renderSheet();
-});
+      // ヘッダ幅
+      for (let c = 0; c < data.cols; c++) {
+        const header = (data.colHeaders && data.colHeaders[c]) ? data.colHeaders[c] : String.fromCharCode(65 + (c % 26));
+        colWidths[c] = Math.max(colWidths[c], measureTextWidth(header) + 24);
+      }
 
-/* 列追加 */
-document.getElementById("addColBtn").addEventListener("click", () => {
-  const data = viewerState.sheetData;
-  data.cols = (data.cols || 0) + 1;
-  for (let r = 0; r < data.rows.length; r++) {
-    data.rows[r] = data.rows[r] || [];
-    data.rows[r].push("");
-  }
-  data.colHeaders = data.colHeaders || [];
-  data.colHeaders.push(String.fromCharCode(65 + ((data.cols-1) % 26)));
-  renderSheet();
-});
+      // セル幅
+      for (let r = 0; r < data.rows.length; r++) {
+        for (let c = 0; c < data.cols; c++) {
+          const v = (data.rows[r] && data.rows[r][c] != null) ? String(data.rows[r][c]) : "";
+          const w = measureTextWidth(v) + 24;
+          if (w > colWidths[c]) colWidths[c] = w;
+        }
+      }
 
-/* 列削除 */
-document.getElementById("delColBtn").addEventListener("click", () => {
-  const data = viewerState.sheetData;
-  if (data.cols <= 1) { updateStatus("列は最低1列必要です"); return; }
-  data.cols = data.cols - 1;
-  for (let r = 0; r < data.rows.length; r++) {
-    if (Array.isArray(data.rows[r])) data.rows[r].splice(-1,1);
-  }
-  if (data.colHeaders) data.colHeaders.splice(-1,1);
-  renderSheet();
-});
+      // 上限を適用
+      for (let c = 0; c < colWidths.length; c++) {
+        if (colWidths[c] > maxColWidth) colWidths[c] = maxColWidth;
+      }
 
-/* 自動サイズボタン */
-document.getElementById("autoSizeBtn").addEventListener("click", autoSizeColumns);
+      // colgroup を作る
+      let colgroup = table.querySelector("colgroup");
+      if (colgroup) colgroup.remove();
+      colgroup = document.createElement("colgroup");
+      for (let c = 0; c < data.cols; c++) {
+        const col = document.createElement("col");
+        col.style.width = colWidths[c] + "px";
+        colgroup.appendChild(col);
+      }
+      table.insertBefore(colgroup, table.firstChild);
 
-/* 保存（localStorage） */
-document.getElementById("saveSheetBtn").addEventListener("click", () => {
-  const item = viewerState.currentItem;
-  if (!item) return;
-  const key = `sheet_item_${item.id}`;
-  localStorage.setItem(key, JSON.stringify(viewerState.sheetData));
-  updateStatus("保存しました");
-  // Supabase に保存したい場合はここで upsert を呼ぶ（必要なら実装します）
-});
+      // テーブル全体幅を設定（合計幅）。これで最後の列が勝手に伸びるのを防ぐ。
+      const total = colWidths.reduce((a,b)=>a+b, 0) + 60; // 余白分
+      table.style.width = total + "px";
+    }
 
-/* ステータス表示 */
-function updateStatus(text) {
-  document.getElementById("sheetStatus").textContent = text;
-}
-</script>
+    // 行追加
+    document.getElementById("addRowBtn").addEventListener("click", () => {
+      const data = viewerState.sheetData;
+      const newRow = new Array(data.cols).fill("");
+      data.rows.push(newRow);
+      data.rowHeaders = data.rowHeaders || [];
+      data.rowHeaders.push(String(data.rows.length));
+      renderSheet();
+    });
 
+    // 行削除
+    document.getElementById("delRowBtn").addEventListener("click", () => {
+      const data = viewerState.sheetData;
+      if (data.rows.length <= 1) { updateStatus("行は最低1行必要です"); return; }
+      data.rows.pop();
+      data.rowHeaders.pop();
+      renderSheet();
+    });
+
+    // 列追加
+    document.getElementById("addColBtn").addEventListener("click", () => {
+      const data = viewerState.sheetData;
+      data.cols = (data.cols || 0) + 1;
+      for (let r = 0; r < data.rows.length; r++) {
+        data.rows[r] = data.rows[r] || [];
+        data.rows[r].push("");
+      }
+      data.colHeaders = data.colHeaders || [];
+      data.colHeaders.push(String.fromCharCode(65 + ((data.cols-1) % 26)));
+      renderSheet();
+    });
+
+    // 列削除
+    document.getElementById("delColBtn").addEventListener("click", () => {
+      const data = viewerState.sheetData;
+      if (data.cols <= 1) { updateStatus("列は最低1列必要です"); return; }
+      data.cols = data.cols - 1;
+      for (let r = 0; r < data.rows.length; r++) {
+        if (Array.isArray(data.rows[r])) data.rows[r].splice(-1,1);
+      }
+      if (data.colHeaders) data.colHeaders.splice(-1,1);
+      renderSheet();
+    });
+
+    // 自動サイズボタン
+    document.getElementById("autoSizeBtn").addEventListener("click", autoSizeColumns);
+
+    // 保存（localStorage のフォールバックは残すが、実際の保存は debouncedSave）
+    document.getElementById("saveSheetBtn").addEventListener("click", () => {
+      // debouncedSave が既に紐づいているが、ここはフォールバックとして local 保存も行う
+      const item = viewerState.currentItem;
+      if (!item) return;
+      const key = `sheet_item_${item.id}`;
+      localStorage.setItem(key, JSON.stringify(viewerState.sheetData));
+      updateStatus("ローカルに保存しました（サーバー保存はボタンで実行）");
+    });
+
+    function updateStatus(text) {
+      document.getElementById("sheetStatus").textContent = text;
+    }
+  </script>
+
+  <!-- モーダル要素（HTML） -->
+  <div id="viewerModal" aria-hidden="true">
+    <div id="viewerContent" role="dialog" aria-modal="true">
+      <img id="viewerImage" src="" alt="preview" />
+      <div class="sheet-controls">
+        <button id="addRowBtn">行を追加</button>
+        <button id="delRowBtn">行を削除</button>
+        <button id="addColBtn">列を追加</button>
+        <button id="delColBtn">列を削除</button>
+        <button id="autoSizeBtn">列幅自動調整</button>
+        <button id="saveSheetBtn">保存</button>
+        <button id="closeViewerBtn" style="margin-left:auto">閉じる</button>
+      </div>
+      <div id="sheetWrap">
+        <table id="sheetTable" class="sheet"></table>
+      </div>
+      <div class="viewer-footer">
+        <div id="metaInfo"></div>
+        <div id="sheetStatus"></div>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>
