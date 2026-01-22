@@ -316,39 +316,71 @@ function measureTextWidth(text, font = "14px sans-serif") {
 }
 
 /* ---------- モーダル操作 ---------- */
+// openViewer を差し替え（既存の openViewer と置き換え）
 function openViewer(item) {
+  // 既存状態をクリアしてから開始
+  viewerState.currentItem = null;
+  viewerState.sheetData = null;
+
   viewerState.currentItem = item;
+
+  // 画像表示
   const img = document.getElementById("viewerImage");
   img.src = item.image_url;
+
+  // メタ情報
   document.getElementById("metaInfo").textContent = `ID: ${item.id}  説明: ${item.description || ""}`;
 
+  // 画像ごとのキーで読み込む
   const key = `sheet_item_${item.id}`;
   const saved = localStorage.getItem(key);
   if (saved) {
     try {
       viewerState.sheetData = JSON.parse(saved);
-    } catch(e) {
+    } catch (e) {
       viewerState.sheetData = null;
     }
   }
+
+  // 保存データがなければ新規初期化（3x3）
   if (!viewerState.sheetData) {
-    // 初期 3x3
     const rows = [["", "", ""], ["", "", ""], ["", "", ""]];
     const cols = 3;
-    const colHeaders = Array.from({length:cols}, (_,i)=>String.fromCharCode(65+i));
-    const rowHeaders = Array.from({length:rows.length}, (_,i)=>String(i+1));
+    const colHeaders = Array.from({ length: cols }, (_, i) => String.fromCharCode(65 + i));
+    const rowHeaders = Array.from({ length: rows.length }, (_, i) => String(i + 1));
     viewerState.sheetData = { id: item.id, rows, cols, colHeaders, rowHeaders };
   }
+
   renderSheet();
   document.getElementById("viewerModal").style.display = "flex";
   document.getElementById("viewerModal").setAttribute("aria-hidden", "false");
 }
 
-/* 閉じる */
+// 保存ボタンハンドラを差し替え（既存の save handler と置き換え）
+document.getElementById("saveSheetBtn").addEventListener("click", () => {
+  const item = viewerState.currentItem;
+  if (!item) {
+    updateStatus("保存できません: アイテムが選択されていません");
+    return;
+  }
+  const key = `sheet_item_${item.id}`;
+  localStorage.setItem(key, JSON.stringify(viewerState.sheetData));
+  updateStatus("保存しました");
+
+  // もし Supabase に保存したい場合はここで upsert を呼ぶ
+  // 例（コメント解除して利用）
+  // await client.from("item_sheets").upsert([{ item_id: item.id, sheet: viewerState.sheetData }]);
+});
+
+// 閉じる時に状態をクリアする（既存の close handler に追加）
 document.getElementById("closeViewerBtn").addEventListener("click", () => {
   document.getElementById("viewerModal").style.display = "none";
   document.getElementById("viewerModal").setAttribute("aria-hidden", "true");
+  // 明示的に状態をクリアして次回の混在を防ぐ
+  viewerState.currentItem = null;
+  viewerState.sheetData = null;
 });
+
 
 /* Esc で閉じる */
 document.addEventListener("keydown", (e) => {
