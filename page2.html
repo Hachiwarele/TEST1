@@ -145,10 +145,12 @@
       const gallery = document.getElementById("gallery");
       gallery.innerHTML = "";
 
-      const { data: items, error: itemsErr } = await client
-        .from("items")
-        .select("*")
-        .order("created_at", { ascending: false });
+const { data: items, error: itemsErr } = await client
+  .from("items")
+  .select("*")
+  .eq("gallery", "page2")
+  .order("created_at", { ascending: false });
+
 
       if (itemsErr || !items) {
         return;
