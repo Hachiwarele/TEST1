@@ -627,6 +627,65 @@
     function updateStatus(text) {
       document.getElementById("sheetStatus").textContent = text;
     }
+
+// モーダル関連のボタンは DOM が準備できてから登録する
+function setupModalHandlers() {
+  const closeBtn = document.getElementById("closeViewerBtn");
+  const saveBtn = document.getElementById("saveSheetBtn");
+  const addRowBtn = document.getElementById("addRowBtn");
+  const delRowBtn = document.getElementById("delRowBtn");
+  const addColBtn = document.getElementById("addColBtn");
+  const delColBtn = document.getElementById("delColBtn");
+  const autoSizeBtn = document.getElementById("autoSizeBtn");
+
+  if (closeBtn) {
+    closeBtn.addEventListener("click", async () => {
+      document.getElementById("viewerModal").style.display = "none";
+      document.getElementById("viewerModal").setAttribute("aria-hidden", "true");
+      // 購読解除して状態クリア
+      if (typeof stopSheetSubscription === "function") {
+        await stopSheetSubscription();
+      } else {
+        // 互換性のため、既存のクリア処理
+        viewerState.currentItem = null;
+        viewerState.sheetData = null;
+        if (viewerState.sheetChannel) {
+          try { await viewerState.sheetChannel.unsubscribe(); } catch(e) { /* ignore */ }
+          viewerState.sheetChannel = null;
+        }
+      }
+    });
+  }
+
+  if (saveBtn) {
+    // 既に debouncedSave を登録している場合は二重登録を避ける
+    if (!saveBtn._hasHandler) {
+      saveBtn.addEventListener("click", () => {
+        // ローカル保存（フォールバック）
+        const item = viewerState.currentItem;
+        if (item) localStorage.setItem(`sheet_item_${item.id}`, JSON.stringify(viewerState.sheetData));
+        // サーバー保存（debounced）
+        if (typeof debouncedSave === "function") debouncedSave();
+      });
+      saveBtn._hasHandler = true;
+    }
+  }
+
+  if (addRowBtn) addRowBtn.addEventListener("click", () => { const d = viewerState.sheetData; d.rows.push(new Array(d.cols).fill("")); d.rowHeaders = d.rowHeaders||[]; d.rowHeaders.push(String(d.rows.length)); renderSheet(); });
+  if (delRowBtn) delRowBtn.addEventListener("click", () => { const d = viewerState.sheetData; if (d.rows.length<=1) { updateStatus("行は最低1行必要です"); return; } d.rows.pop(); d.rowHeaders.pop(); renderSheet(); });
+  if (addColBtn) addColBtn.addEventListener("click", () => { const d = viewerState.sheetData; d.cols=(d.cols||0)+1; for(let r=0;r<d.rows.length;r++){ d.rows[r]=d.rows[r]||[]; d.rows[r].push("") } d.colHeaders=d.colHeaders||[]; d.colHeaders.push(String.fromCharCode(65+((d.cols-1)%26))); renderSheet(); });
+  if (delColBtn) delColBtn.addEventListener("click", () => { const d = viewerState.sheetData; if (d.cols<=1) { updateStatus("列は最低1列必要です"); return; } d.cols=d.cols-1; for(let r=0;r<d.rows.length;r++) if(Array.isArray(d.rows[r])) d.rows[r].splice(-1,1); if(d.colHeaders) d.colHeaders.splice(-1,1); renderSheet(); });
+  if (autoSizeBtn) autoSizeBtn.addEventListener("click", autoSizeColumns);
+}
+
+// DOM が準備できたらハンドラを登録
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", setupModalHandlers);
+} else {
+  setupModalHandlers();
+}
+
+    
   </script>
 
   <!-- モーダル要素（HTML） -->
